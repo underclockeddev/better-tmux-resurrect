@@ -140,7 +140,8 @@ tmux_default_command() {
 }
 
 pane_creation_command() {
-	echo "cat '$(pane_contents_file "restore" "${1}:${2}.${3}")'; exec $(tmux_default_command)"
+	local pane_content_file="$(pane_contents_file "restore" "${1}:${2}.${3}")"
+	echo "cat '$pane_content_file'; rm -f '$pane_content_file'; exec $(tmux_default_command)"
 }
 
 new_window() {
@@ -375,14 +376,6 @@ restore_active_and_alternate_sessions() {
 	done < "$RESTORE_FILE_PATH"
 }
 
-# A cleanup that happens after 'restore_all_panes' seems to fix fish shell
-# users' restore problems.
-cleanup_restored_pane_contents() {
-	if is_restoring_pane_contents; then
-		rm "$(pane_contents_dir "restore")"/*
-	fi
-}
-
 # Only one restore per tmux server at a time. Two restores running at once race
 # (pane missing -> window exists -> split-window) and leave extra panes squashed
 # to one line, e.g. when tmux-continuum's auto-restore fires twice at login.
@@ -412,13 +405,14 @@ main() {
 		restore_grouped_sessions  # also restores active and alt windows for grouped sessions
 		restore_active_and_alternate_windows
 		restore_active_and_alternate_sessions
-		cleanup_restored_pane_contents
 		execute_hook "post-restore-all"
 		stop_spinner
 		display_message "Tmux restore complete!"
 	fi
 }
-acquire_restore_lock || exit 0 # another restore is running
-# The restore runs in a subshell without the lock's fd, so processes it starts (a
-# hook's background job, a tmux server) don't inherit the lock and keep it held.
-(exec 9>&-; main)
+if [ "${BASH_SOURCE[0]}" == "$0" ]; then
+	acquire_restore_lock || exit 0 # another restore is running
+	# The restore runs in a subshell without the lock's fd, so processes it starts (a
+	# hook's background job, a tmux server) don't inherit the lock and keep it held.
+	(exec 9>&-; main)
+fi
