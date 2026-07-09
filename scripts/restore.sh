@@ -49,6 +49,9 @@ check_saved_session_exists() {
 	if [ ! -f "$resurrect_file" ]; then
 		display_message "Tmux resurrect file not found!"
 		return 1
+	elif [ ! -s "$resurrect_file" ]; then
+		display_message "Tmux resurrect file is empty: $resurrect_file"
+		return 1
 	fi
 }
 
