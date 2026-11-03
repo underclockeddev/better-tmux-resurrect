@@ -18,6 +18,30 @@ is upstream's README, and still applies.
   delete the file `last` points to (upstream #598), and an interrupted save at
   shutdown could become `last` with nothing in it. Neither can happen now.
 
+### Merged from upstream pull requests
+
+Each one was read and tested here before it went in, and keeps its author.
+
+- One restore at a time, so a double auto-restore no longer squashes extra
+  panes (#600, Andrew Boldi).
+- A restore reads the snapshot `last` named when it started, even if a save
+  moves `last` meanwhile (#584, kvoli).
+- An empty `last` stops the restore with a message instead of half-running it
+  (#579, Matt Van Horn).
+- Restored pane contents are removed by each pane once printed, fixing the
+  cleanup race on fish and slow shells (#580, Matt Van Horn).
+- Dotted session names restore into the right session (#597, Angel J. Haro).
+- A window whose name starts with a saved index no longer hides a missing
+  pane (#575, Theodor Lundqvist).
+- A command argument containing a comma restores intact (#587, Scott Moser).
+- The pgrep strategy keeps multi-line commands on one line (#591, Tim
+  Phillips).
+- Without a locale set, saves no longer come out near-empty (#568, Vivek
+  Reddy Chithari).
+- No more fixed `/tmp` paths open to symlink attacks (#567, Pistos), and the
+  save directory, which holds pane contents, is private to you (#562, Florian
+  Burka).
+
 ### Install
 
 With [tpm](https://github.com/tmux-plugins/tpm), in place of
