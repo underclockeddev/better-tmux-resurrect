@@ -185,17 +185,35 @@ fetch_and_dump_grouped_sessions(){
 	fi
 }
 
-# translates pane pid to process command running inside a pane
+# Upstream finds each pane's command by forking the strategy script (bash, ps,
+# sed, grep, cut) plus a show-option, per pane: ~10s at 111 panes. The default
+# "ps" strategy now reads one ps snapshot, keyed on the exact parent pid
+# (upstream's grep "^$pid" also matched pid 12 against 123's children). Any
+# other strategy still runs per pane.
+declare -A _pane_children
+_snapshot_pane_children() {
+	local ppid args
+	while read -r ppid args; do
+		_pane_children[$ppid]+="${_pane_children[$ppid]:+$'\n'}$args"
+	done < <(ps -ao "ppid=,args=")
+}
+
 dump_panes() {
 	local full_command
+	local strategy="$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")"
+	[ "$strategy" = "$default_save_command_strategy" ] && _snapshot_pane_children
 	dump_panes_raw |
 		while IFS=$d read line_type session_name window_number window_active window_flags pane_index pane_title dir pane_active pane_command pane_pid history_size; do
 			# not saving panes from grouped sessions
 			if is_session_grouped "$session_name"; then
 				continue
 			fi
-			full_command="$(pane_full_command $pane_pid)"
-			dir=$(echo $dir | sed 's/ /\\ /') # escape all spaces in directory path
+			if [ "$strategy" = "$default_save_command_strategy" ]; then
+				full_command="${_pane_children[$pane_pid]}"
+			else
+				full_command="$(pane_full_command $pane_pid)"
+			fi
+			dir="${dir/ /\\ }" # escape the first space, as upstream's sed did
 			echo "${line_type}${d}${session_name}${d}${window_number}${d}${window_active}${d}${window_flags}${d}${pane_index}${d}${pane_title}${d}${dir}${d}${pane_active}${d}${pane_command}${d}:${full_command}"
 		done
 }
