@@ -219,17 +219,34 @@ dump_panes() {
 }
 
 dump_windows() {
-	dump_windows_raw |
-		while IFS=$d read line_type session_name window_index window_name window_active window_flags window_layout; do
-			# not saving windows from grouped sessions
-			if is_session_grouped "$session_name"; then
-				continue
-			fi
-			automatic_rename="$(tmux show-window-options -vt "${session_name}:${window_index}" automatic-rename)"
-			# If the option was unset, use ":" as a placeholder.
-			[ -z "${automatic_rename}" ] && automatic_rename=":"
-			echo "${line_type}${d}${session_name}${d}${window_index}${d}${window_name}${d}${window_active}${d}${window_flags}${d}${window_layout}${d}${automatic_rename}"
-		done
+	# Upstream runs show-window-options once per window, a tmux fork each
+	# (~1.3s at 60). One source-file runs them all, targeted by window id; a
+	# "-" line before each tells an unset option (no output) from the next.
+	local conf="$(mktemp)" raw i=-1
+	local -a windows renames
+	while IFS= read -r raw; do
+		windows+=("${raw#*$d}")
+		printf 'display-message -p "-"\nshow-window-options -v -t %s automatic-rename\n' "${raw%%$d*}" >> "$conf"
+	done < <(tmux list-windows -a -F "#{window_id}${d}$(window_format)")
+	while IFS= read -r raw; do
+		if [ "$raw" = "-" ]; then
+			i=$((i + 1))
+			renames[i]=""
+		else
+			renames[i]="$raw"
+		fi
+	done < <(tmux source-file "$conf" 2>/dev/null)
+	rm -f "$conf"
+	for i in "${!windows[@]}"; do
+		IFS=$d read line_type session_name window_index window_name window_active window_flags window_layout <<< "${windows[i]}"
+		# not saving windows from grouped sessions
+		if is_session_grouped "$session_name"; then
+			continue
+		fi
+		# If the option was unset, use ":" as a placeholder.
+		automatic_rename="${renames[i]:-:}"
+		echo "${line_type}${d}${session_name}${d}${window_index}${d}${window_name}${d}${window_active}${d}${window_flags}${d}${window_layout}${d}${automatic_rename}"
+	done
 }
 
 dump_state() {
