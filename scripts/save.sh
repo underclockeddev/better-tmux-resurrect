@@ -244,7 +244,12 @@ save_all() {
 	dump_windows >> "$resurrect_file_path"
 	dump_state   >> "$resurrect_file_path"
 	execute_hook "post-save-layout" "$resurrect_file_path"
-	if files_differ "$resurrect_file_path" "$last_resurrect_file"; then
+	# A valid dump always contains at least one `window` line. Anything smaller
+	# is an interrupted save (e.g. tmux killed mid-write on shutdown) and must
+	# NOT overwrite `last`, or auto-restore has nothing to load next boot.
+	if ! grep -q '^window	' "$resurrect_file_path" 2>/dev/null; then
+		rm -f "$resurrect_file_path"
+	elif files_differ "$resurrect_file_path" "$last_resurrect_file"; then
 		ln -fs "$(basename "$resurrect_file_path")" "$last_resurrect_file"
 	else
 		rm "$resurrect_file_path"
