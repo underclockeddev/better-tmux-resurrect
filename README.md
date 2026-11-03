@@ -1,6 +1,39 @@
-# Tmux Resurrect
+# Better Tmux Resurrect
 
-[![Build Status](https://travis-ci.org/tmux-plugins/tmux-resurrect.svg?branch=master)](https://travis-ci.org/tmux-plugins/tmux-resurrect)
+A maintained fork of
+[tmux-plugins/tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect),
+which has had no commit since 2023 while fixes kept arriving as pull requests.
+This fork carries those fixes, plus its own. Everything below the next section
+is upstream's README, and still applies.
+
+### What's better
+
+- **Saves are fast.** About 3s at 112 panes instead of about 20s: pane
+  commands come from one `ps` snapshot, and pane contents and window options
+  are read in one tmux call each instead of several per pane.
+- **Saves never collide.** Every save takes one lock, whoever started it
+  (key binding, tmux-continuum, a shutdown hook), so two saves no longer delete
+  each other's pane contents. A save that finds another running waits for it.
+- **`last` is never left dangling.** Two saves in the same second used to
+  delete the file `last` points to (upstream #598), and an interrupted save at
+  shutdown could become `last` with nothing in it. Neither can happen now.
+
+### Install
+
+With [tpm](https://github.com/tmux-plugins/tpm), in place of
+`tmux-plugins/tmux-resurrect`:
+
+    set -g @plugin 'underclockeddev/better-tmux-resurrect'
+
+Saved environments and options are unchanged, so an existing setup keeps
+working.
+
+### Credit
+
+The plugin is Bruno Sutic's and its contributors' (MIT, see `LICENSE.md`).
+Merged pull requests keep their authors.
+
+---
 
 Restore `tmux` environment after system restart.
 

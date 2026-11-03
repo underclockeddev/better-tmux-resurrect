@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# The fork's own check: every shell script parses. Run by grape-mods'
+# fork-watch after a rebase onto upstream applies cleanly, before anything is
+# published (CHECK in its fork.conf).
+set -euo pipefail
+cd "$(dirname "$0")"
+fail=0
+while IFS= read -r -d '' f; do
+    bash -n "$f" || { echo "does not parse: $f" >&2; fail=1; }
+done < <(find . -path ./.git -prune -o -type f \( -name '*.sh' -o -name '*.tmux' \) -print0)
+exit "$fail"
