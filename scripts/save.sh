@@ -337,7 +337,25 @@ main() {
 		if show_output; then
 			start_spinner "Saving..." "Tmux environment saved!"
 		fi
-		save_all
+		# Every save runs this script: prefix C-s, continuum's autosave and
+		# tmux.service's ExecStop. Two at once delete each other's pane
+		# captures before they are archived (GMOD-6HEFN), and continuum's own
+		# lock only sees continuum. So one lock here, and a save that finds
+		# another running waits for it rather than skipping: the shutdown save
+		# must still happen after an autosave in flight.
+		#
+		# The file name is per-second and helpers.sh fixes it when sourced, so
+		# a save that waited, or any two in one second, would write the same
+		# file; the second then finds it "identical to last" (it is last) and
+		# deletes it, leaving last dangling. So name it under the lock, and
+		# never reuse a name a save already wrote.
+		(
+			flock -w 60 9 || exit 0
+			_RESURRECT_FILE_PATH=""
+			while [ -e "$(resurrect_file_path)" ]; do sleep 0.2; done
+			_RESURRECT_FILE_PATH="$(resurrect_file_path)"
+			save_all
+		) 9>"${XDG_RUNTIME_DIR:-/tmp}/tmux-resurrect-save.lock"
 		if show_output; then
 			stop_spinner
 			display_message "Tmux environment saved!"
