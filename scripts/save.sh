@@ -236,12 +236,41 @@ dump_state() {
 	tmux display-message -p "$(state_format)"
 }
 
+# A tmux config-file double-quoted string: escape \ " and $.
+_tmux_quote() {
+	local s="${1//\\/\\\\}"
+	s="${s//\"/\\\"}"
+	printf '"%s"' "${s//\$/\\\$}"
+}
+
 dump_pane_contents() {
+	# Upstream spends four tmux forks a pane (history_size, cursor_y, a screen
+	# capture to count lines, the capture) and drops trailing empty lines by
+	# pushing each capture, megabytes for a long scrollback, through a bash
+	# $(...): ~5.6s at 112 panes. Now one list-panes carries both values, one
+	# source-file captures every pane to its file, and one sed strips the
+	# trailing empty lines. The screen is still counted, but only for a pane
+	# with no history and the cursor on line 0.
 	local pane_contents_area="$(get_tmux_option "$pane_contents_area_option" "$default_pane_contents_area")"
-	dump_panes_raw |
-		while IFS=$d read line_type session_name window_number window_active window_flags pane_index pane_title dir pane_active pane_command pane_pid history_size; do
-			capture_pane_contents "${session_name}:${window_number}.${pane_index}" "$history_size" "$pane_contents_area"
-		done
+	local dir="$(pane_contents_dir "save")" conf="$(mktemp)" buffer="grape-resurrect-$$"
+	local pane pane_id history_size cursor_y start_line file
+	local -a files
+	while IFS=$d read pane pane_id history_size cursor_y; do
+		[ "$history_size" -gt 0 ] || [ "$cursor_y" -gt 0 ] ||
+			[ "$(number_nonempty_lines_on_screen "$pane_id")" -gt 1 ] ||
+			continue
+		start_line="-$history_size"
+		[ "$pane_contents_area" = "visible" ] && start_line="0"
+		file="${dir}/pane-${pane}"
+		files+=("$file")
+		printf 'capture-pane -eJ -S %s -t %s -b %s\nsave-buffer -b %s %s\ndelete-buffer -b %s\n' \
+			"$start_line" "$pane_id" "$buffer" "$buffer" "$(_tmux_quote "$file")" "$buffer" >> "$conf"
+	done < <(tmux list-panes -a -F "#{session_name}:#{window_index}.#{pane_index}${d}#{pane_id}${d}#{history_size}${d}#{cursor_y}")
+	tmux source-file "$conf" 2>/dev/null
+	rm -f "$conf"
+	# delete trailing empty lines; -i edits each file on its own, so $ is per file
+	[ ${#files[@]} -gt 0 ] && sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "${files[@]}" 2>/dev/null
+	return 0
 }
 
 remove_old_backups() {
