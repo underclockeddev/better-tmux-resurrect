@@ -33,6 +33,18 @@ def explicit_command(argv, session_id):
     argv = claude_argv(argv)
     if any(any(c in arg for c in "\n\r\t") for arg in argv):
         raise ValueError("argument cannot fit a snapshot record")
+    # Do not replay the launch prompt into an existing conversation. Explicit
+    # option arities distinguish flag values from that positional prompt. An
+    # unknown flag is unsafe to reinterpret; leave that pane for manual resume.
+    values = {"--agent", "--agents", "--append-system-prompt", "--system-prompt",
+              "--append-system-prompt-file", "--system-prompt-file", "--model",
+              "--permission-mode", "--settings", "--setting-sources", "--effort",
+              "--debug-file", "--fallback-model", "--name", "-n", "--autocompact"}
+    switches = {"--dangerously-skip-permissions", "--allow-dangerously-skip-permissions",
+                "--disable-slash-commands", "--verbose", "--ide", "--chrome",
+                "--no-chrome", "--brief", "--bare", "--ax-screen-reader"}
+    multiple = {"--add-dir", "--allowedTools", "--allowed-tools", "--disallowedTools",
+                "--disallowed-tools", "--mcp-config", "--betas"}
     args = []
     index = 1
     while index < len(argv):
@@ -49,8 +61,23 @@ def explicit_command(argv, session_id):
             continue
         elif arg.startswith(("--resume=", "--session-id=")):
             continue
-        else:
+        elif arg in switches:
             args.append(arg)
+        elif arg in values:
+            if index == len(argv):
+                raise ValueError("missing flag value")
+            args.extend((arg, argv[index]))
+            index += 1
+        elif arg in multiple:
+            args.append(arg)
+            while index < len(argv) and not argv[index].startswith("-"):
+                args.append(argv[index])
+                index += 1
+        elif arg.partition("=")[0] in values | multiple:
+            args.append(arg)
+        elif arg.startswith("-"):
+            raise ValueError("unknown flag arity")
+        # Otherwise this is the original positional prompt. Do not send it twice.
     return shlex.join(["claude", *args, "--resume", str(uuid.UUID(session_id))])
 
 

@@ -21,6 +21,10 @@ class Sessions(unittest.TestCase):
         sid = "11111111-1111-4111-8111-111111111111"
         command = sessions.explicit_command(["claude", "--model", "a b", "--resume", "old", "--fork-session", "--continue"], sid)
         self.assertEqual(shlex.split(command), ["claude", "--model", "a b", "--resume", sid])
+        self.assertEqual(shlex.split(sessions.explicit_command(["claude", "--model", "a b", "do the work"], sid)), ["claude", "--model", "a b", "--resume", sid])
+        self.assertIn("--model", sessions.explicit_command(["claude", "--resume", "--model", "x"], sid))
+        with self.assertRaises(ValueError):
+            sessions.explicit_command(["claude", "--unknown", "value"], sid)
         with self.assertRaises(ValueError):
             sessions.explicit_command(["claude", "--print", "hello"], sid)
 

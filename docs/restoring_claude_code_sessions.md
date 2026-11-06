@@ -19,6 +19,9 @@ birth ticks, in its terminal's foreground process group, descended from that
 pane's process (or the pane process itself). Exactly one match is required.
 The command becomes `claude <original arguments> --resume <exact UUID>`;
 conversation selectors are replaced and shell argument boundaries preserved.
+The initial positional prompt is omitted so it is not sent twice. Unknown
+option arities are rejected rather than confused with a prompt; the supported
+flag sets live beside the command builder.
 Print-mode commands and arguments containing tabs/newlines cannot be captured.
 No hook or tmux-specific session database is installed. No transcript is read.
 
