@@ -8,4 +8,5 @@ fail=0
 while IFS= read -r -d '' f; do
     bash -n "$f" || { echo "does not parse: $f" >&2; fail=1; }
 done < <(find . -path ./.git -prune -o -type f \( -name '*.sh' -o -name '*.tmux' \) -print0)
+PYTHONDONTWRITEBYTECODE=1 python3 tests/test_claude_sessions.py || fail=1
 exit "$fail"

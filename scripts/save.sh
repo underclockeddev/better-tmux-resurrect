@@ -85,6 +85,16 @@ dump_panes_raw() {
 	tmux list-panes -a -F "$(pane_format)"
 }
 
+# One registry read per save, alongside the existing one-ps snapshot. The
+# extra column is internal only; persisted pane records keep their format.
+dump_panes_with_claude_sessions() {
+	if [ "$(get_tmux_option '@resurrect-strategy-claude' '')" = session ]; then
+		dump_panes_raw | python3 "$CURRENT_DIR/claude_sessions.py" capture
+	else
+		dump_panes_raw
+	fi
+}
+
 dump_windows_raw(){
 	tmux list-windows -a -F "$(window_format)"
 }
@@ -202,8 +212,8 @@ dump_panes() {
 	local full_command
 	local strategy="$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")"
 	[ "$strategy" = "$default_save_command_strategy" ] && _snapshot_pane_children
-	dump_panes_raw |
-		while IFS=$d read line_type session_name window_number window_active window_flags pane_index pane_title dir pane_active pane_command pane_pid history_size; do
+	dump_panes_with_claude_sessions |
+		while IFS=$d read -r line_type session_name window_number window_active window_flags pane_index pane_title dir pane_active pane_command pane_pid history_size claude_command; do
 			# not saving panes from grouped sessions
 			if is_session_grouped "$session_name"; then
 				continue
@@ -212,6 +222,9 @@ dump_panes() {
 				full_command="${_pane_children[$pane_pid]}"
 			else
 				full_command="$(pane_full_command $pane_pid)"
+			fi
+			if [ -n "$claude_command" ]; then
+				full_command="${claude_command:1}"
 			fi
 			dir="${dir/ /\\ }" # escape the first space, as upstream's sed did
 			echo "${line_type}${d}${session_name}${d}${window_number}${d}${window_active}${d}${window_flags}${d}${pane_index}${d}${pane_title}${d}${dir}${d}${pane_active}${d}${pane_command}${d}:${full_command}"
@@ -334,6 +347,10 @@ show_output() {
 }
 
 main() {
+	if [ "$(get_tmux_option '@resurrect-strategy-claude' '')" = session ] && ! command -v python3 >/dev/null; then
+		printf '%s\n' 'tmux-resurrect: Python 3 is required for exact Claude sessions; save aborted' >&2
+		return 1
+	fi
 	if supported_tmux_version_ok; then
 		if show_output; then
 			start_spinner "Saving..." "Tmux environment saved!"
