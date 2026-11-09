@@ -62,6 +62,29 @@ while True: time.sleep(1)
                     if predicate(): return
                     time.sleep(.05)
                 self.fail('private tmux condition timed out: ' + tm('capture-pane', '-p', '-t', 'parallel:0.0', check=False))
+            def stop():
+                # kill-server returns before the server and its pane shells
+                # exit: a client connecting meanwhile gets "server exited
+                # unexpectedly", and a shell writing .bash_history on hangup
+                # races the temporary directory's removal. A backgrounded stub
+                # survives the hangup, so every pane descendant is killed.
+                def tree(pid):
+                    kids = []
+                    for task in Path(f'/proc/{pid}/task').glob('*'):
+                        try: kids += (task / 'children').read_text().split()
+                        except OSError: pass
+                    return [pid] + [d for kid in kids for d in tree(kid)]
+                panes = tm('list-panes', '-a', '-F', '#{pid}', check=False).split()
+                pids = [d for pane in panes for d in tree(pane)]
+                pids += tm('display', '-p', '#{pid}', check=False).split()
+                tm('kill-server', check=False)
+                for pid in pids:
+                    try: os.kill(int(pid), 9)
+                    except ProcessLookupError: pass
+                for _ in range(100):
+                    if not any(Path(f'/proc/{pid}').exists() for pid in pids): return
+                    time.sleep(.05)
+                self.fail('private tmux server did not exit: ' + ' '.join(pids))
             def save():
                 tm('run-shell', shlex.join([str(ROOT / 'scripts/save.sh'), 'quiet']))
                 return (home / '.local/share/tmux/resurrect/last').read_text()
@@ -102,7 +125,7 @@ while True: time.sleep(1)
                 self.assertIn(':true', missing)
                 rowfile.write_text(original)
                 text = save()
-                tm('kill-server')
+                stop()
                 # Restore on a fresh private server with no registry producers.
                 tm('-f', '/dev/null', 'new-session', '-d', '-s', 'placeholder', '/bin/bash --noprofile --norc')
                 tm('set', '-g', 'default-shell', '/bin/bash')
@@ -131,7 +154,7 @@ while True: time.sleep(1)
                 # Kill/recreate and stale registry: old identities are not live.
                 self.assertEqual(sessions.explicit_command(['claude', '--resume', ids[0]], ids[1]), 'claude --resume ' + ids[1])
             finally:
-                tm('kill-server', check=False)
+                stop()
 
 
 if __name__ == '__main__':
